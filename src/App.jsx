@@ -499,14 +499,3 @@ function ArbCard({ result, budget }) {
     </div>
   );
 }
-
-function formatDate(d) {
-  if (!d) return '';
-  return new Date(d).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-function formatVol(v) {
-  if (!v) return '';
-  if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`;
-  if (v >= 1e3) return `$${(v/1e3).toFixed(0)}K`;
-  return `$${v}`;
-}
