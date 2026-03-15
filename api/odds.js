@@ -1,98 +1,121 @@
-// api/odds.js — recupera quote da The Odds API
-// Richiede variabile d'ambiente: ODDS_API_KEY
+// api/odds.js — recupera quote da The Odds API su tutti i mercati binari
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET');
 
-  const { sport } = req.query;
   const API_KEY = process.env.ODDS_API_KEY;
-
   if (!API_KEY) {
     return res.status(500).json({ error: 'ODDS_API_KEY non configurata nelle variabili Vercel' });
   }
 
-  // Mappatura sport → chiavi API
-  const sportKeyMap = {
-    soccer: [
-      // Solo competizioni a eliminazione diretta — niente campionati (hanno il pareggio)
-      'soccer_uefa_champs_league',        // UEFA Champions League
-      'soccer_uefa_europa_league',        // UEFA Europa League
-      'soccer_uefa_conference_league',    // Conference League
-      'soccer_england_league_cup',        // Carabao Cup
-      'soccer_italy_coppa_italia',        // Coppa Italia
-      'soccer_spain_copa_del_rey',        // Copa del Rey
-      'soccer_germany_dfb_pokal',         // DFB Pokal
-      'soccer_france_coupe_de_france',    // Coupe de France
-      'soccer_fifa_world_cup',            // Mondiali (eliminazione diretta)
-      'soccer_uefa_european_championship', // Europei
-    ],
-    basketball: [
-      'basketball_nba',
-    ],
-    tennis: null, // gestito dinamicamente
-    football: [
-      'americanfootball_nfl',
-    ],
-  };
+  // ─── SPORT BINARI AL 100% (nessun pareggio possibile strutturalmente) ───────
+  const BINARY_SPORT_KEYS = [
+    // Tennis — tutti i tornei attivi
+    // (recuperati dinamicamente sotto)
+
+    // Basket
+    'basketball_nba',
+    'basketball_euroleague',
+
+    // Football americano
+    'americanfootball_nfl',
+
+    // Baseball
+    'baseball_mlb',
+
+    // Hockey su ghiaccio (NHL — overtime/shootout garantisce vincitore)
+    'icehockey_nhl',
+
+    // MMA / Boxe
+    'mma_mixed_martial_arts',
+
+    // Calcio KNOCKOUT (eliminazione diretta — no pareggio ai tempi regolamentari)
+    'soccer_uefa_champs_league',
+    'soccer_uefa_europa_league',
+    'soccer_uefa_conference_league',
+    'soccer_italy_coppa_italia',
+    'soccer_spain_copa_del_rey',
+    'soccer_germany_dfb_pokal',
+    'soccer_england_league_cup',
+    'soccer_france_coupe_de_france',
+    'soccer_fifa_world_cup',
+    'soccer_uefa_european_championship',
+
+    // Mercati non sportivi disponibili sui bookmaker
+    'politics_us_presidential_election_winner',
+    'politics_us',
+  ];
 
   try {
-    let sportKeys = sportKeyMap[sport];
+    // Recupera lista sport attivi per prendere tutti i tornei di tennis
+    const sportsRes = await fetch(`https://api.the-odds-api.com/v4/sports/?apiKey=${API_KEY}`);
+    if (!sportsRes.ok) throw new Error('Errore recupero lista sport');
+    const sportsList = await sportsRes.json();
 
-    // Per il tennis recuperiamo prima i tornei attivi
-    if (sport === 'tennis') {
-      const sportsRes = await fetch(
-        `https://api.the-odds-api.com/v4/sports/?apiKey=${API_KEY}`
-      );
-      if (!sportsRes.ok) throw new Error('Errore recupero lista sport');
-      const sportsData = await sportsRes.json();
-      sportKeys = sportsData
-        .filter(s => s.group === 'Tennis' && s.active)
-        .map(s => s.key)
-        .slice(0, 4); // max 4 tornei per limitare le richieste
+    const tennisKeys = sportsList
+      .filter(s => s.group === 'Tennis' && s.active)
+      .map(s => s.key)
+      .slice(0, 6);
+
+    const allKeys = [...new Set([...BINARY_SPORT_KEYS, ...tennisKeys])];
+
+    // Fetch parallelo — max 10 alla volta per non saturare
+    const chunks = [];
+    for (let i = 0; i < allKeys.length; i += 10) {
+      chunks.push(allKeys.slice(i, i + 10));
     }
 
-    if (!sportKeys || sportKeys.length === 0) {
-      return res.json([]);
-    }
-
-    // Fetch parallelo per tutti i campionati/tornei
-    const results = await Promise.all(
-      sportKeys.map(key =>
-        fetch(
-          `https://api.the-odds-api.com/v4/sports/${key}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h&oddsFormat=decimal`
+    const allEvents = [];
+    for (const chunk of chunks) {
+      const results = await Promise.all(
+        chunk.map(key =>
+          fetch(
+            `https://api.the-odds-api.com/v4/sports/${key}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h&oddsFormat=decimal`
+          )
+            .then(r => r.ok ? r.json() : [])
+            .catch(() => [])
         )
-          .then(r => r.ok ? r.json() : [])
-          .catch(() => [])
-      )
-    );
+      );
 
-    // Normalizza e unisci tutti gli eventi
-    const allEvents = results
-      .flat()
-      .filter(e => e && e.id && e.bookmakers?.length > 0)
-      .map(e => {
-        // Trova le migliori quote disponibili tra tutti i bookmaker
-        const allOutcomes = {};
-        for (const bk of e.bookmakers) {
-          const h2h = bk.markets?.find(m => m.key === 'h2h');
-          if (!h2h) continue;
-          for (const outcome of h2h.outcomes) {
-            if (!allOutcomes[outcome.name] || outcome.price > allOutcomes[outcome.name]) {
-              allOutcomes[outcome.name] = outcome.price;
+      for (const events of results) {
+        if (!Array.isArray(events)) continue;
+        for (const e of events) {
+          if (!e?.id || !e.bookmakers?.length) continue;
+
+          // Prendi le migliori quote tra tutti i bookmaker
+          const bestOutcomes = {};
+          for (const bk of e.bookmakers) {
+            const h2h = bk.markets?.find(m => m.key === 'h2h');
+            if (!h2h) continue;
+            for (const outcome of h2h.outcomes) {
+              if (!bestOutcomes[outcome.name] || outcome.price > bestOutcomes[outcome.name]) {
+                bestOutcomes[outcome.name] = outcome.price;
+              }
             }
           }
-        }
 
-        return {
-          id: e.id,
-          sport: e.sport_key,
-          homeTeam: e.home_team,
-          awayTeam: e.away_team,
-          commenceTime: e.commence_time,
-          outcomes: allOutcomes, // { "Torino": 2.15, "Parma": 3.90, "Draw": 2.95 }
-        };
-      });
+          // Scarta eventi con pareggio — devono essere strettamente binari
+          const hasDraw = Object.keys(bestOutcomes).some(k =>
+            k.toLowerCase() === 'draw' || k.toLowerCase() === 'x'
+          );
+          if (hasDraw) continue;
+
+          // Deve avere esattamente 2 esiti
+          if (Object.keys(bestOutcomes).length !== 2) continue;
+
+          allEvents.push({
+            id: e.id,
+            sport: e.sport_key,
+            sportGroup: e.sport_title,
+            homeTeam: e.home_team,
+            awayTeam: e.away_team,
+            commenceTime: e.commence_time,
+            outcomes: bestOutcomes,
+          });
+        }
+      }
+    }
 
     res.json(allEvents);
   } catch (error) {
