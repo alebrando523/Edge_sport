@@ -119,6 +119,7 @@ export default function App() {
   const [edgeThreshold, setEdgeThreshold] = useState(3);
   const [sortBy, setSortBy]               = useState('edge'); // 'edge' | 'volume' | 'time'
   const [copyStatus, setCopyStatus]       = useState('');
+  const [apiUsage, setApiUsage]           = useState(null);
   const [filterSport, setFilterSport]     = useState('all');
 
   const fetchData = useCallback(async () => {
@@ -132,7 +133,10 @@ export default function App() {
       const [odds, poly] = await Promise.all([oddsRes.json(), polyRes.json()]);
       if (odds.error) throw new Error(`Odds API: ${odds.error}`);
       if (poly.error) throw new Error(`Polymarket: ${poly.error}`);
-      setOddsData(Array.isArray(odds) ? odds : []);
+      // odds ora ha struttura { events, apiUsage }
+      const oddsEvents = odds.events || (Array.isArray(odds) ? odds : []);
+      setOddsData(oddsEvents);
+      if (odds.apiUsage) setApiUsage(odds.apiUsage);
       setPolyData(poly.matchMarkets || []);
       setPolySeasonData(poly.seasonMarkets || []);
       setLastUpdate(new Date());
@@ -247,6 +251,15 @@ export default function App() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             {loading && <div style={{ width: 14, height: 14, border: '2px solid #1a1a2e', borderTop: '2px solid #00ff88', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
             {lastUpdate && <span style={{ fontSize: 11, color: '#3a3a6a' }}>{lastUpdate.toLocaleTimeString('it-IT')}</span>}
+            {apiUsage && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#0a0a18', border: '1px solid #1a1a2e', borderRadius: 4, padding: '4px 10px' }}>
+                <span style={{ fontSize: 10, color: '#3a3a6a', letterSpacing: 1 }}>API</span>
+                <span style={{ fontSize: 12, fontWeight: 600, color: apiUsage.remaining < 50 ? '#ff5555' : apiUsage.remaining < 150 ? '#ffaa44' : '#00ff88' }}>
+                  {apiUsage.used}/{apiUsage.used + apiUsage.remaining}
+                </span>
+                <span style={{ fontSize: 10, color: '#2a2a4a' }}>({apiUsage.remaining} rimaste)</span>
+              </div>
+            )}
             <button className="btn" onClick={fetchData} disabled={loading}
               style={{ background: 'transparent', border: '1px solid #2a2a4a', color: '#6060a0', padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, transition: 'all .2s' }}>
               ⟳ Aggiorna
