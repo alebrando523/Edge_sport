@@ -92,6 +92,8 @@ function calcArbitrage(oddsEv, polyEv, budget = 100) {
 
   for (const [oddsTeamA, oddsQuotaA] of oddsOutcomes) {
     for (const [polyTeamB, polyPriceB] of polyOutcomes) {
+      // Scarta prezzi Polymarket anomali (mercato già risolto o abbinamento errato)
+      if (polyPriceB >= 0.99 || polyPriceB <= 0.01) continue;
       // I due lati devono riferirsi a squadre DIVERSE (non la stessa)
       const sameTeam = overlap(oddsTeamA, polyTeamB) >= 0.4;
       if (sameTeam) continue;
@@ -99,7 +101,11 @@ function calcArbitrage(oddsEv, polyEv, budget = 100) {
       // Il lato rimanente del bookmaker
       const [oddsTeamB, oddsQuotaB] = oddsOutcomes.find(([t]) => t !== oddsTeamA);
       // Il lato rimanente di Polymarket
-      const [polyTeamA, polyPriceA] = polyOutcomes.find(([t]) => t !== polyTeamB);
+      const polyRemainder = polyOutcomes.find(([t]) => t !== polyTeamB);
+      if (!polyRemainder) continue;
+      const [polyTeamA, polyPriceA] = polyRemainder;
+      // Scarta anche se il lato rimanente è anomalo
+      if (polyPriceA >= 0.99 || polyPriceA <= 0.01) continue;
 
       // Verifica che il lato rimanente si riferisca alla stessa squadra
       if (overlap(oddsTeamA, polyTeamA) < 0.4 && overlap(oddsTeamB, polyTeamB) < 0.4) continue;
