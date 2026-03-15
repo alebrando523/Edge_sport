@@ -15,12 +15,17 @@ export default async function handler(req, res) {
   // Mappatura sport → chiavi API
   const sportKeyMap = {
     soccer: [
-      'soccer_italy_serie_a',
-      'soccer_epl',
-      'soccer_spain_la_liga',
-      'soccer_uefa_champs_league',
-      'soccer_germany_bundesliga',
-      'soccer_france_ligue_one',
+      // Solo competizioni a eliminazione diretta — niente campionati (hanno il pareggio)
+      'soccer_uefa_champs_league',        // UEFA Champions League
+      'soccer_uefa_europa_league',        // UEFA Europa League
+      'soccer_uefa_conference_league',    // Conference League
+      'soccer_england_league_cup',        // Carabao Cup
+      'soccer_italy_coppa_italia',        // Coppa Italia
+      'soccer_spain_copa_del_rey',        // Copa del Rey
+      'soccer_germany_dfb_pokal',         // DFB Pokal
+      'soccer_france_coupe_de_france',    // Coupe de France
+      'soccer_fifa_world_cup',            // Mondiali (eliminazione diretta)
+      'soccer_uefa_european_championship', // Europei
     ],
     basketball: [
       'basketball_nba',
