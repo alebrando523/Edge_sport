@@ -60,6 +60,9 @@ export default async function handler(req, res) {
 
     const allKeys = [...new Set([...BINARY_SPORT_KEYS, ...tennisKeys])];
 
+    let lastUsed = null;
+    let lastRemaining = null;
+
     // Fetch parallelo — max 10 alla volta per non saturare
     const chunks = [];
     for (let i = 0; i < allKeys.length; i += 10) {
@@ -73,7 +76,14 @@ export default async function handler(req, res) {
           fetch(
             `https://api.the-odds-api.com/v4/sports/${key}/odds/?apiKey=${API_KEY}&regions=eu&markets=h2h&oddsFormat=decimal`
           )
-            .then(r => r.ok ? r.json() : [])
+            .then(r => {
+              if (r.ok) {
+                lastUsed = r.headers.get('x-requests-used') || lastUsed;
+                lastRemaining = r.headers.get('x-requests-remaining') || lastRemaining;
+                return r.json();
+              }
+              return [];
+            })
             .catch(() => [])
         )
       );
@@ -117,7 +127,13 @@ export default async function handler(req, res) {
       }
     }
 
-    res.json(allEvents);
+    res.json({
+      events: allEvents,
+      apiUsage: {
+        used: parseInt(lastUsed || 0),
+        remaining: parseInt(lastRemaining || 500),
+      }
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
