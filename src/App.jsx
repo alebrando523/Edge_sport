@@ -1,105 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
 
-// ─── COSTANTI ────────────────────────────────────────────────────────────────
-
-const SPORT_LABELS = {
-  basketball_nba: '🏀 NBA',
-  basketball_euroleague: '🏀 EuroLeague',
-  americanfootball_nfl: '🏈 NFL',
-  baseball_mlb: '⚾ MLB',
-  icehockey_nhl: '🏒 NHL',
-  mma_mixed_martial_arts: '🥊 MMA',
-  soccer_uefa_champs_league: '⚽ Champions League',
-  soccer_uefa_europa_league: '⚽ Europa League',
-  soccer_uefa_conference_league: '⚽ Conference League',
-  soccer_italy_coppa_italia: '⚽ Coppa Italia',
-  soccer_spain_copa_del_rey: '⚽ Copa del Rey',
-  soccer_germany_dfb_pokal: '⚽ DFB Pokal',
-  soccer_england_league_cup: '⚽ Carabao Cup',
-  soccer_france_coupe_de_france: '⚽ Coupe de France',
-  soccer_fifa_world_cup: '⚽ Mondiali',
-  soccer_uefa_european_championship: '⚽ Europei',
-  politics_us: '🗳 Politica USA',
-};
-
-function getSportLabel(sportKey = '') {
-  if (SPORT_LABELS[sportKey]) return SPORT_LABELS[sportKey];
-  if (sportKey.includes('tennis')) return '🎾 Tennis';
-  if (sportKey.includes('soccer')) return '⚽ Calcio';
-  if (sportKey.includes('politics')) return '🗳 Politica';
-  if (sportKey.includes('crypto')) return '₿ Crypto';
-  return '📊 ' + sportKey.replace(/_/g, ' ');
-}
-
-// ─── MATCHING ────────────────────────────────────────────────────────────────
-
-const STRIP_WORDS = /\b(fc|calcio|afc|cf|sc|ac|ss|us|as|fk|bk|sk|cd|rcd|rc|sd|ud|ca|sv|vfb|vfl|rb|rbl|tsv|tsg|1899|1913|1905|1904|de|del|la|le|los|las|el|il|lo|gli|will|win|beat|vs|v|the|to|who|which|advance|qualify|make|reach|league|cup|serie|premier|champions|bundesliga|ligue|eredivisie|primeira|superliga|united|city|real|club|sporting|atletico|athletico|athletic|borussia|internazionale|inter|dynamo|dinamo|lokomotiv|spartak|shakhtar)\b/gi;
-
-function normalize(name = '') {
-  return name.toLowerCase().replace(STRIP_WORDS, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function tokens(str) {
-  return normalize(str).split(' ').filter(t => t.length >= 3);
-}
-
-function tokenOverlap(a, b) {
-  const ta = tokens(a);
-  const tb = tokens(b);
-  if (!ta.length) return 0;
-  return ta.filter(t => tb.some(bt => bt.includes(t) || t.includes(bt))).length / ta.length;
-}
-
-function tryMatch(oddsEvent, polyEvent) {
-  const polyText = [polyEvent.title, ...Object.keys(polyEvent.outcomes)].join(' ');
-  return tokenOverlap(oddsEvent.homeTeam, polyText) >= 0.5
-    || tokenOverlap(oddsEvent.awayTeam, polyText) >= 0.5;
-}
-
-function findPolyOutcome(polyOutcomes, oddsKey) {
-  let best = null, bestScore = 0;
-  for (const [k, v] of Object.entries(polyOutcomes)) {
-    const score = Math.max(tokenOverlap(oddsKey, k), tokenOverlap(k, oddsKey));
-    if (score > bestScore) { bestScore = score; best = [k, v]; }
-  }
-  return bestScore >= 0.35 && best ? { key: best[0], price: best[1] } : null;
-}
-
-// ─── CALCOLO ─────────────────────────────────────────────────────────────────
-
-function devigOdds(oddsMap) {
-  const entries = Object.entries(oddsMap);
-  const probs = entries.map(([k, v]) => [k, 1 / v]);
-  const total = probs.reduce((s, [, p]) => s + p, 0);
-  return Object.fromEntries(probs.map(([k, p]) => [k, p / total]));
-}
-
-function formatDate(dateStr) {
-  if (!dateStr) return '';
-  return new Date(dateStr).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
-
-function formatVolume(v) {
-  if (!v || v === 0) return '';
-  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(1)}M`;
-  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}K`;
-  return `$${v}`;
-}
-
-// ─── CSS GLOBALE ─────────────────────────────────────────────────────────────
-
+// ─── CSS ─────────────────────────────────────────────────────────────────────
 const css = `
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #06060e; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  @keyframes glow { 0%,100%{box-shadow:0 0 8px rgba(0,255,136,.3)} 50%{box-shadow:0 0 24px rgba(0,255,136,.7)} }
   ::-webkit-scrollbar { width: 5px; }
   ::-webkit-scrollbar-track { background: #06060e; }
   ::-webkit-scrollbar-thumb { background: #1a1a2e; border-radius: 3px; }
   details summary::-webkit-details-marker { display: none; }
-  .card:hover { border-color: rgba(0,255,136,0.2) !important; }
+  .card-arb { animation: glow 2s ease-in-out infinite; }
+  .btn:hover { background: rgba(0,255,136,.1) !important; color: #00ff88 !important; }
   .tab:hover { color: #a0a0d0 !important; }
-  .btn:hover { background: rgba(0,255,136,0.1) !important; color: #00ff88 !important; }
 `;
 if (typeof document !== 'undefined') {
   const s = document.createElement('style');
@@ -107,44 +20,168 @@ if (typeof document !== 'undefined') {
   document.head.appendChild(s);
 }
 
-// ─── APP ─────────────────────────────────────────────────────────────────────
+// ─── SPORT LABELS ─────────────────────────────────────────────────────────────
+const SPORT_LABELS = {
+  basketball_nba: '🏀 NBA',
+  basketball_euroleague: '🏀 EuroLeague',
+  americanfootball_nfl: '🏈 NFL',
+  baseball_mlb: '⚾ MLB',
+  icehockey_nhl: '🏒 NHL',
+  mma_mixed_martial_arts: '🥊 MMA',
+  soccer_uefa_champs_league: '⚽ UCL',
+  soccer_uefa_europa_league: '⚽ UEL',
+  soccer_uefa_conference_league: '⚽ UECL',
+  soccer_italy_coppa_italia: '⚽ Coppa Italia',
+  soccer_spain_copa_del_rey: '⚽ Copa del Rey',
+  soccer_germany_dfb_pokal: '⚽ DFB Pokal',
+  soccer_england_league_cup: '⚽ Carabao Cup',
+  soccer_france_coupe_de_france: '⚽ Coupe de France',
+  soccer_fifa_world_cup: '⚽ Mondiali',
+  soccer_uefa_european_championship: '⚽ Europei',
+};
+function getSportLabel(key = '') {
+  if (SPORT_LABELS[key]) return SPORT_LABELS[key];
+  if (key.includes('tennis')) return '🎾 Tennis';
+  if (key.includes('soccer')) return '⚽ Calcio';
+  if (key.includes('politics')) return '🗳 Politica';
+  return '📊 ' + key.replace(/_/g, ' ');
+}
 
+// ─── MATCHING ────────────────────────────────────────────────────────────────
+const STRIP = /\b(fc|calcio|afc|cf|sc|ac|ss|us|as|fk|bk|sk|cd|rcd|rc|sd|ud|ca|sv|vfb|vfl|rb|rbl|tsv|tsg|1899|1913|1905|1904|de|del|la|le|los|las|el|il|lo|gli|will|win|beat|vs|v|the|to|who|which|advance|qualify|make|reach|league|cup|serie|premier|champions|bundesliga|ligue|united|city|real|club|sporting|atletico|athletico|borussia|internazionale|inter|dynamo|dinamo)\b/gi;
+
+function normalize(s = '') {
+  return s.toLowerCase().replace(STRIP, ' ').replace(/[^a-z\s]/g, ' ').replace(/\s+/g, ' ').trim();
+}
+function tokens(s) { return normalize(s).split(' ').filter(t => t.length >= 3); }
+function overlap(a, b) {
+  const ta = tokens(a), tb = tokens(b);
+  if (!ta.length) return 0;
+  return ta.filter(t => tb.some(bt => bt.includes(t) || t.includes(bt))).length / ta.length;
+}
+function isMatch(oddsEv, polyEv) {
+  const polyText = [polyEv.title, ...Object.keys(polyEv.outcomes)].join(' ');
+  return overlap(oddsEv.homeTeam, polyText) >= 0.5 || overlap(oddsEv.awayTeam, polyText) >= 0.5;
+}
+
+// ─── ARBITRAGGIO ─────────────────────────────────────────────────────────────
+//
+// Logica:
+//   Per ogni evento abbinato, cerchiamo la combinazione ottimale:
+//   - Lato A su Polymarket  +  Lato B sul Bookmaker
+//   - Lato B su Polymarket  +  Lato A sul Bookmaker
+//
+//   Convertiamo i prezzi Polymarket (es. 0.57) in quote decimali (es. 1/0.57 = 1.754)
+//   Poi calcoliamo il margine totale:
+//     margin = (1/quotaA) + (1/quotaB)
+//   Se margin < 1.00 → ARBITRAGGIO REALE
+//
+//   Profitto garantito % = (1/margin - 1) * 100
+//   Stake ottimale per ogni lato con budget totale B:
+//     stakeA = B / (quotaA * margin)
+//     stakeB = B / (quotaB * margin)
+
+function calcArbitrage(oddsEv, polyEv, budget = 100) {
+  const oddsOutcomes = Object.entries(oddsEv.outcomes); // [[team, quota], ...]
+  const polyOutcomes = Object.entries(polyEv.outcomes); // [[team, price], ...]
+
+  if (oddsOutcomes.length !== 2 || polyOutcomes.length !== 2) return null;
+
+  // Prova tutte le combinazioni: ogni lato odds vs ogni lato poly
+  const candidates = [];
+
+  for (const [oddsTeamA, oddsQuotaA] of oddsOutcomes) {
+    for (const [polyTeamB, polyPriceB] of polyOutcomes) {
+      // I due lati devono riferirsi a squadre DIVERSE (non la stessa)
+      const sameTeam = overlap(oddsTeamA, polyTeamB) >= 0.4;
+      if (sameTeam) continue;
+
+      // Il lato rimanente del bookmaker
+      const [oddsTeamB, oddsQuotaB] = oddsOutcomes.find(([t]) => t !== oddsTeamA);
+      // Il lato rimanente di Polymarket
+      const [polyTeamA, polyPriceA] = polyOutcomes.find(([t]) => t !== polyTeamB);
+
+      // Verifica che il lato rimanente si riferisca alla stessa squadra
+      if (overlap(oddsTeamA, polyTeamA) < 0.4 && overlap(oddsTeamB, polyTeamB) < 0.4) continue;
+
+      // Converti prezzo Polymarket in quota decimale
+      if (polyPriceB <= 0 || polyPriceB >= 1) continue;
+      const polyQuotaB = 1 / polyPriceB;
+
+      // Margine totale
+      const margin = (1 / oddsQuotaA) + (1 / polyQuotaB);
+
+      candidates.push({
+        margin,
+        // Bookmaker: scommetti su oddsTeamA a oddsQuotaA
+        bkSide: { team: oddsTeamA, quota: oddsQuotaA, platform: 'Bookmaker' },
+        // Polymarket: scommetti su polyTeamB a polyQuotaB (prezzo polyPriceB)
+        pmSide: { team: polyTeamB, price: polyPriceB, quota: polyQuotaB, platform: 'Polymarket' },
+      });
+    }
+  }
+
+  if (!candidates.length) return null;
+
+  // Prendi la combinazione con margine più basso
+  candidates.sort((a, b) => a.margin - b.margin);
+  const best = candidates[0];
+
+  const profit = (1 / best.margin - 1) * 100;
+  const stakeBK = budget / (best.bkSide.quota * best.margin);
+  const stakePM = budget / (best.pmSide.quota * best.margin);
+
+  return {
+    isArbitrage: best.margin < 1.0,
+    margin: best.margin,
+    profit: profit.toFixed(2),         // % profitto garantito
+    stakeBK: stakeBK.toFixed(2),        // quanto mettere sul bookmaker
+    stakePM: stakePM.toFixed(2),        // quanto mettere su Polymarket
+    bkSide: best.bkSide,
+    pmSide: best.pmSide,
+    // Validità: somma probabilità implicite corretta
+    valid: best.margin > 0.5 && best.margin < 1.5,
+  };
+}
+
+// ─── UTILS ───────────────────────────────────────────────────────────────────
+function formatDate(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function formatVol(v) {
+  if (!v) return '';
+  if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `$${(v/1e3).toFixed(0)}K`;
+  return `$${v}`;
+}
+
+// ─── APP ─────────────────────────────────────────────────────────────────────
 export default function App() {
-  const [oddsData, setOddsData]           = useState([]);
-  const [polyData, setPolyData]           = useState([]);
-  const [polySeasonData, setPolySeasonData] = useState([]);
-  const [loading, setLoading]             = useState(false);
-  const [error, setError]                 = useState(null);
-  const [lastUpdate, setLastUpdate]       = useState(null);
-  const [edgeThreshold, setEdgeThreshold] = useState(3);
-  const [sortBy, setSortBy]               = useState('edge'); // 'edge' | 'volume' | 'time'
-  const [copyStatus, setCopyStatus]       = useState('');
-  const [apiUsage, setApiUsage]           = useState(null);
-  const [filterSport, setFilterSport]     = useState('all');
+  const [oddsData, setOddsData]         = useState([]);
+  const [polyData, setPolyData]         = useState([]);
+  const [loading, setLoading]           = useState(false);
+  const [error, setError]               = useState(null);
+  const [lastUpdate, setLastUpdate]     = useState(null);
+  const [apiUsage, setApiUsage]         = useState(null);
+  const [budget, setBudget]             = useState(100);
+  const [showAll, setShowAll]           = useState(false);
+  const [copyStatus, setCopyStatus]     = useState('');
+  const [filterSport, setFilterSport]   = useState('all');
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+    setLoading(true); setError(null);
     try {
-      const [oddsRes, polyRes] = await Promise.all([
-        fetch('/api/odds'),
-        fetch('/api/polymarket'),
-      ]);
-      const [odds, poly] = await Promise.all([oddsRes.json(), polyRes.json()]);
+      const [oRes, pRes] = await Promise.all([fetch('/api/odds'), fetch('/api/polymarket')]);
+      const [odds, poly] = await Promise.all([oRes.json(), pRes.json()]);
       if (odds.error) throw new Error(`Odds API: ${odds.error}`);
       if (poly.error) throw new Error(`Polymarket: ${poly.error}`);
-      // odds ora ha struttura { events, apiUsage }
-      const oddsEvents = odds.events || (Array.isArray(odds) ? odds : []);
-      setOddsData(oddsEvents);
-      if (odds.apiUsage) setApiUsage(odds.apiUsage);
+      setOddsData(odds.events || (Array.isArray(odds) ? odds : []));
       setPolyData(poly.matchMarkets || []);
-      setPolySeasonData(poly.seasonMarkets || []);
+      if (odds.apiUsage) setApiUsage(odds.apiUsage);
       setLastUpdate(new Date());
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setLoading(false);
-    }
+    } catch (e) { setError(e.message); }
+    finally { setLoading(false); }
   }, []);
 
   useEffect(() => {
@@ -153,108 +190,76 @@ export default function App() {
     return () => clearInterval(iv);
   }, [fetchData]);
 
-  // ─── MATCHING ──────────────────────────────────────────────────────────────
-
-  const matched = [];
+  // ─── CALCOLO ARBITRAGGI ────────────────────────────────────────────────────
+  const results = [];
   for (const poly of polyData) {
-    const odds = oddsData.find(e => tryMatch(e, poly));
+    const odds = oddsData.find(e => isMatch(e, poly));
     if (!odds) continue;
-
-    const realProbs = devigOdds(odds.outcomes);
-    const comparisons = [];
-
-    for (const [key, realProb] of Object.entries(realProbs)) {
-      const pm = findPolyOutcome(poly.outcomes, key);
-      if (!pm) continue;
-      const edge = parseFloat(((pm.price - realProb) * 100).toFixed(1));
-      comparisons.push({ label: key, realProb: (realProb * 100).toFixed(1), polyPrice: (pm.price * 100).toFixed(1), edge });
-    }
-
-    if (!comparisons.length) continue;
-
-    // Validazione: la somma dei prezzi Polymarket deve essere vicina a 100%
-    // Se non lo è, il matching è sbagliato (due outcome mappati allo stesso prezzo)
-    const polySum = comparisons.reduce((s, c) => s + parseFloat(c.polyPrice), 0);
-    if (polySum < 85 || polySum > 115) continue; // tolleranza ±15%
-
-    const maxEdge = Math.max(...comparisons.map(c => c.edge));
-    matched.push({
-      id: poly.id,
-      title: poly.title,
-      homeTeam: odds.homeTeam,
-      awayTeam: odds.awayTeam,
-      sport: odds.sport,
-      commenceTime: odds.commenceTime,
-      volume: poly.volume,
-      comparisons,
-      maxEdge,
-    });
+    const arb = calcArbitrage(odds, poly, budget);
+    if (!arb || !arb.valid) continue;
+    results.push({ id: poly.id, title: poly.title, homeTeam: odds.homeTeam, awayTeam: odds.awayTeam, sport: odds.sport, commenceTime: odds.commenceTime, volume: poly.volume, arb });
   }
 
-  // Ordina
-  const sorted = [...matched].sort((a, b) => {
-    if (sortBy === 'edge') return b.maxEdge - a.maxEdge;
-    if (sortBy === 'volume') return b.volume - a.volume;
-    return new Date(a.commenceTime) - new Date(b.commenceTime);
-  });
+  results.sort((a, b) => parseFloat(b.arb.profit) - parseFloat(a.arb.profit));
 
-  // Sport unici per filtro
-  const availableSports = [...new Set(matched.map(e => e.sport))];
+  const arbOpps    = results.filter(r => r.arb.isArbitrage);
+  const nearMiss   = results.filter(r => !r.arb.isArbitrage && parseFloat(r.arb.profit) > -5);
+  const displayed  = showAll ? results : (arbOpps.length ? arbOpps : nearMiss.slice(0, 10));
 
-  const filtered = filterSport === 'all'
-    ? sorted
-    : sorted.filter(e => e.sport === filterSport);
+  const sports = [...new Set(results.map(r => r.sport))];
 
-  const withEdge = filtered.filter(e => e.maxEdge >= edgeThreshold).length;
+  const filtered = filterSport === 'all' ? displayed : displayed.filter(r => r.sport === filterSport);
 
   // ─── COPY DEBUG ────────────────────────────────────────────────────────────
-
   function copyDebug() {
     const lines = [
-      '=== EDGE FINDER DEBUG ===',
+      '=== EDGE FINDER — ARBITRAGGIO ===',
       `Aggiornato: ${lastUpdate?.toLocaleString('it-IT')}`,
+      `Budget: €${budget}`,
       '',
-      `POLYMARKET (${polyData.length} eventi binari abbinabili + ${polySeasonData.length} stagionali)`,
-      ...polyData.map(e => `  [PM] ${e.title} | Vol: ${formatVolume(e.volume)} | ${Object.entries(e.outcomes).map(([k,v]) => `${k}: ${(v*100).toFixed(0)}%`).join(' / ')}`),
+      `OPPORTUNITÀ DI ARBITRAGGIO REALE (${arbOpps.length})`,
+      ...arbOpps.map(r =>
+        `✓ ${r.homeTeam} vs ${r.awayTeam} | Profitto: +${r.arb.profit}% | ` +
+        `BK: ${r.arb.bkSide.team} €${r.arb.stakeBK} @ ${r.arb.bkSide.quota.toFixed(2)} | ` +
+        `PM: ${r.arb.pmSide.team} €${r.arb.stakePM} @ ${(r.arb.pmSide.price*100).toFixed(1)}¢`
+      ),
       '',
-      `BOOKMAKER (${oddsData.length} eventi binari)`,
-      ...oddsData.map(e => `  [BK] ${e.homeTeam} vs ${e.awayTeam} | ${getSportLabel(e.sport)} | ${Object.entries(e.outcomes).map(([k,v]) => `${k}: ${(1/v*100).toFixed(0)}%`).join(' / ')}`),
+      `VICINI ALL'ARBITRAGGIO (margine < 5%) — (${nearMiss.length})`,
+      ...nearMiss.map(r =>
+        `~ ${r.homeTeam} vs ${r.awayTeam} | Margine: ${(r.arb.margin*100).toFixed(1)}% | Gap: ${r.arb.profit}%`
+      ),
       '',
-      `EVENTI ABBINATI (${matched.length}) — Edge ≥ ${edgeThreshold}%: ${withEdge}`,
-      ...matched.map(e => `  ✓ ${e.title} | Edge max: ${e.maxEdge > 0 ? '+' : ''}${e.maxEdge}% | ${comparisonsLine(e.comparisons)}`),
+      `POLYMARKET (${polyData.length} eventi)`,
+      ...polyData.map(e => `  ${e.title} | Vol: ${formatVol(e.volume)}`),
+      '',
+      `BOOKMAKER (${oddsData.length} eventi)`,
+      ...oddsData.map(e => `  ${e.homeTeam} vs ${e.awayTeam} | ${getSportLabel(e.sport)}`),
     ];
     navigator.clipboard.writeText(lines.join('\n'));
     setCopyStatus('Copiato!');
     setTimeout(() => setCopyStatus(''), 2000);
   }
 
-  function comparisonsLine(comps) {
-    return comps.map(c => `${c.label}: reale ${c.realProb}% / PM ${c.polyPrice}% / edge ${c.edge > 0 ? '+' : ''}${c.edge}%`).join(' | ');
-  }
-
   // ─── RENDER ────────────────────────────────────────────────────────────────
-
   return (
     <div style={{ minHeight: '100vh', background: '#06060e', color: '#d0d0e8', fontFamily: "'JetBrains Mono', monospace" }}>
 
-      {/* Header */}
-      <header style={{ borderBottom: '1px solid #1a1a2e', padding: '18px 24px', background: '#080810', position: 'sticky', top: 0, zIndex: 10 }}>
-        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      {/* HEADER */}
+      <header style={{ borderBottom: '1px solid #1a1a2e', padding: '16px 24px', background: '#080810', position: 'sticky', top: 0, zIndex: 10 }}>
+        <div style={{ maxWidth: 1200, margin: '0 auto', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12 }}>
           <div>
             <div style={{ fontFamily: "'Syne', sans-serif", fontSize: 22, fontWeight: 800, letterSpacing: 4, color: '#fff' }}>
               EDGE<span style={{ color: '#00ff88' }}>FINDER</span>
-            </div>
-            <div style={{ fontSize: 10, color: '#3a3a6a', marginTop: 2, letterSpacing: 1 }}>
-              ARBITRAGGIO BOOKMAKER ↔ POLYMARKET — MERCATI BINARI
+              <span style={{ fontSize: 11, color: '#3a3a6a', marginLeft: 12, letterSpacing: 2, fontFamily: 'inherit' }}>ARBITRAGGIO PURO</span>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {loading && <div style={{ width: 14, height: 14, border: '2px solid #1a1a2e', borderTop: '2px solid #00ff88', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+            {loading && <div style={{ width: 14, height: 14, border: '2px solid #1a1a2e', borderTop: '2px solid #00ff88', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />}
             {lastUpdate && <span style={{ fontSize: 11, color: '#3a3a6a' }}>{lastUpdate.toLocaleTimeString('it-IT')}</span>}
             {apiUsage && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#0a0a18', border: '1px solid #1a1a2e', borderRadius: 4, padding: '4px 10px' }}>
                 <span style={{ fontSize: 10, color: '#3a3a6a', letterSpacing: 1 }}>API</span>
-                <span style={{ fontSize: 12, fontWeight: 600, color: apiUsage.remaining < 50 ? '#ff5555' : apiUsage.remaining < 150 ? '#ffaa44' : '#00ff88' }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: apiUsage.remaining < 50 ? '#ff5555' : apiUsage.remaining < 150 ? '#ffaa44' : '#00ff88' }}>
                   {apiUsage.used}/{apiUsage.used + apiUsage.remaining}
                 </span>
                 <span style={{ fontSize: 10, color: '#2a2a4a' }}>({apiUsage.remaining} rimaste)</span>
@@ -270,27 +275,25 @@ export default function App() {
 
       <main style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 16px' }}>
 
-        {/* Errore */}
         {error && (
           <div style={{ background: 'rgba(255,80,80,.08)', border: '1px solid rgba(255,80,80,.3)', borderRadius: 6, padding: '12px 18px', color: '#ff8888', fontSize: 12, marginBottom: 20 }}>
             ⚠ {error}
-            {error.includes('ODDS_API_KEY') && <div style={{ marginTop: 6, opacity: .7 }}>Registrati su the-odds-api.com e aggiungi ODDS_API_KEY nelle variabili Vercel.</div>}
           </div>
         )}
 
-        {/* Controlli */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, alignItems: 'center', background: '#0a0a18', border: '1px solid #1a1a2e', borderRadius: 8, padding: '14px 20px', marginBottom: 20 }}>
+        {/* CONTROLLI */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', background: '#0a0a18', border: '1px solid #1a1a2e', borderRadius: 8, padding: '16px 20px', marginBottom: 20 }}>
 
           {/* Stats */}
-          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
             {[
-              { num: filtered.length, label: 'eventi abbinati', color: '#d0d0e8' },
-              { num: withEdge, label: `edge ≥ ${edgeThreshold}%`, color: '#00ff88' },
-              { num: polyData.length, label: 'Polymarket binari', color: '#6688ff' },
-              { num: oddsData.length, label: 'Bookmaker binari', color: '#aa88ff' },
+              { num: arbOpps.length,   label: 'arb reali',         color: '#00ff88' },
+              { num: nearMiss.length,  label: 'vicini all\'arb',    color: '#ffaa44' },
+              { num: polyData.length,  label: 'Polymarket',         color: '#6688ff' },
+              { num: oddsData.length,  label: 'Bookmaker',          color: '#aa88ff' },
             ].map(s => (
               <div key={s.label} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                <span style={{ fontSize: 22, fontWeight: 600, color: s.color, lineHeight: 1 }}>{s.num}</span>
+                <span style={{ fontSize: 24, fontWeight: 700, color: s.color, lineHeight: 1 }}>{s.num}</span>
                 <span style={{ fontSize: 10, color: '#3a3a6a', letterSpacing: .5 }}>{s.label}</span>
               </div>
             ))}
@@ -298,108 +301,97 @@ export default function App() {
 
           <div style={{ flex: 1 }} />
 
-          {/* Soglia */}
+          {/* Budget */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 10, color: '#3a3a6a', letterSpacing: 1 }}>SOGLIA EDGE</span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-              <input type="range" min="0" max="20" step=".5" value={edgeThreshold}
-                onChange={e => setEdgeThreshold(parseFloat(e.target.value))}
-                style={{ accentColor: '#00ff88', width: 120, cursor: 'pointer' }} />
-              <span style={{ fontSize: 14, color: '#00ff88', fontWeight: 600, minWidth: 40 }}>{edgeThreshold}%</span>
-            </div>
-          </div>
-
-          {/* Ordina */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <span style={{ fontSize: 10, color: '#3a3a6a', letterSpacing: 1 }}>ORDINA PER</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              {[['edge', 'Edge'], ['volume', 'Volume'], ['time', 'Data']].map(([val, lbl]) => (
-                <button key={val} className="tab" onClick={() => setSortBy(val)}
-                  style={{ background: sortBy === val ? 'rgba(0,255,136,.1)' : 'transparent', border: `1px solid ${sortBy === val ? '#00ff88' : '#1a1a2e'}`, color: sortBy === val ? '#00ff88' : '#4a4a6a', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, transition: 'all .15s' }}>
-                  {lbl}
+            <span style={{ fontSize: 10, color: '#3a3a6a', letterSpacing: 1 }}>BUDGET SIMULAZIONE (€)</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {[50, 100, 200, 500, 1000].map(v => (
+                <button key={v} className="tab" onClick={() => setBudget(v)}
+                  style={{ background: budget === v ? 'rgba(0,255,136,.1)' : 'transparent', border: `1px solid ${budget === v ? '#00ff88' : '#1a1a2e'}`, color: budget === v ? '#00ff88' : '#4a4a6a', padding: '4px 10px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, transition: 'all .15s' }}>
+                  {v}
                 </button>
               ))}
             </div>
           </div>
+
+          {/* Toggle */}
+          <button className="btn" onClick={() => setShowAll(!showAll)}
+            style={{ background: 'transparent', border: '1px solid #2a2a4a', color: '#6060a0', padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, transition: 'all .2s' }}>
+            {showAll ? 'Solo arb reali' : 'Mostra tutti'}
+          </button>
         </div>
 
-        {/* Filtro sport */}
-        {availableSports.length > 1 && (
+        {/* FILTRO SPORT */}
+        {sports.length > 1 && (
           <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 20 }}>
-            <button className="tab" onClick={() => setFilterSport('all')}
-              style={{ background: filterSport === 'all' ? 'rgba(0,255,136,.1)' : 'transparent', border: `1px solid ${filterSport === 'all' ? '#00ff88' : '#1a1a2e'}`, color: filterSport === 'all' ? '#00ff88' : '#4a4a6a', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, transition: 'all .15s' }}>
-              Tutti
-            </button>
-            {availableSports.map(sp => (
+            {['all', ...sports].map(sp => (
               <button key={sp} className="tab" onClick={() => setFilterSport(sp)}
                 style={{ background: filterSport === sp ? 'rgba(0,255,136,.1)' : 'transparent', border: `1px solid ${filterSport === sp ? '#00ff88' : '#1a1a2e'}`, color: filterSport === sp ? '#00ff88' : '#4a4a6a', padding: '5px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, transition: 'all .15s' }}>
-                {getSportLabel(sp)}
+                {sp === 'all' ? 'Tutti' : getSportLabel(sp)}
               </button>
             ))}
           </div>
         )}
 
-        {/* Loading */}
-        {loading && !matched.length && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#3a3a6a', fontSize: 13, padding: '48px 0', justifyContent: 'center' }}>
-            <div style={{ width: 18, height: 18, border: '2px solid #1a1a2e', borderTop: '2px solid #00ff88', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
-            Recupero dati da Bookmaker e Polymarket…
-          </div>
-        )}
-
-        {/* Nessun match */}
-        {!loading && !error && !filtered.length && (polyData.length > 0 || oddsData.length > 0) && (
-          <div style={{ textAlign: 'center', color: '#3a3a6a', fontSize: 13, padding: '48px 20px', lineHeight: 1.8 }}>
-            Nessun evento abbinato trovato.<br />
-            <small>Controlla il pannello Debug per vedere i dati raw delle due API.</small>
-          </div>
-        )}
-
-        {/* Event Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(460px, 1fr))', gap: 12, marginBottom: 32 }}>
-          {filtered.map(ev => (
-            <EventCard key={ev.id} event={ev} threshold={edgeThreshold} />
-          ))}
+        {/* LEGENDA */}
+        <div style={{ display: 'flex', gap: 20, marginBottom: 20, fontSize: 11, color: '#3a3a6a', flexWrap: 'wrap' }}>
+          <span><span style={{ color: '#00ff88' }}>●</span> Arbitraggio reale — profitto garantito su qualsiasi esito</span>
+          <span><span style={{ color: '#ffaa44' }}>●</span> Vicino all'arb — monitorare, la finestra può aprirsi</span>
         </div>
 
-        {/* DEBUG PANEL */}
+        {/* LOADING */}
+        {loading && !results.length && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, color: '#3a3a6a', fontSize: 13, padding: '48px 0', justifyContent: 'center' }}>
+            <div style={{ width: 18, height: 18, border: '2px solid #1a1a2e', borderTop: '2px solid #00ff88', borderRadius: '50%', animation: 'spin .8s linear infinite' }} />
+            Scansione mercati in corso…
+          </div>
+        )}
+
+        {/* NESSUN RISULTATO */}
+        {!loading && !error && !filtered.length && (
+          <div style={{ textAlign: 'center', color: '#3a3a6a', fontSize: 13, padding: '48px 20px', lineHeight: 2 }}>
+            Nessuna opportunità di arbitraggio in questo momento.<br />
+            <small>Il sistema si aggiorna ogni 5 minuti. Le finestre di arb si aprono e chiudono velocemente.</small><br />
+            <button className="btn" onClick={() => setShowAll(true)}
+              style={{ marginTop: 16, background: 'transparent', border: '1px solid #2a2a4a', color: '#6060a0', padding: '8px 20px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 12 }}>
+              Mostra tutti i match vicini
+            </button>
+          </div>
+        )}
+
+        {/* CARDS */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(480px, 1fr))', gap: 14, marginBottom: 32 }}>
+          {filtered.map(r => <ArbCard key={r.id} result={r} budget={budget} />)}
+        </div>
+
+        {/* DEBUG */}
         <details style={{ border: '1px solid #1a1a2e', borderRadius: 8, overflow: 'hidden' }}>
           <summary style={{ padding: '12px 18px', fontSize: 12, color: '#3a3a6a', cursor: 'pointer', background: '#0a0a18', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span>🔍 Debug — Dati raw API ({polyData.length} PM + {oddsData.length} BK)</span>
+            <span>🔍 Debug raw — {polyData.length} Polymarket + {oddsData.length} Bookmaker</span>
             <button className="btn" onClick={e => { e.preventDefault(); copyDebug(); }}
               style={{ background: copyStatus ? 'rgba(0,255,136,.15)' : 'transparent', border: `1px solid ${copyStatus ? '#00ff88' : '#2a2a4a'}`, color: copyStatus ? '#00ff88' : '#6060a0', padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit', fontSize: 11, transition: 'all .2s' }}>
               {copyStatus || '📋 Copia tutto'}
             </button>
           </summary>
-
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }}>
-            {/* Polymarket */}
             <div>
-              <div style={{ padding: '8px 16px', fontSize: 10, color: '#00ff88', letterSpacing: 1, borderBottom: '1px solid #1a1a2e', background: '#080810' }}>
-                POLYMARKET BINARI ({polyData.length})
-              </div>
-              <div style={{ maxHeight: 280, overflowY: 'auto', background: '#080810' }}>
+              <div style={{ padding: '8px 16px', fontSize: 10, color: '#00ff88', letterSpacing: 1, borderBottom: '1px solid #1a1a2e', background: '#080810' }}>POLYMARKET ({polyData.length})</div>
+              <div style={{ maxHeight: 260, overflowY: 'auto', background: '#080810' }}>
                 {polyData.map(e => (
-                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 14px', borderBottom: '1px solid #0d0d1e', gap: 8 }}>
-                    <span style={{ color: '#8080b0', fontSize: 11, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</span>
-                    <span style={{ color: '#3a3a6a', fontSize: 10, flexShrink: 0 }}>{formatVolume(e.volume)}</span>
+                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 14px', borderBottom: '1px solid #0d0d1e' }}>
+                    <span style={{ color: '#8080b0', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.title}</span>
+                    <span style={{ color: '#3a3a6a', fontSize: 10, flexShrink: 0, marginLeft: 8 }}>{formatVol(e.volume)}</span>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* Bookmaker */}
             <div style={{ borderLeft: '1px solid #1a1a2e' }}>
-              <div style={{ padding: '8px 16px', fontSize: 10, color: '#6688ff', letterSpacing: 1, borderBottom: '1px solid #1a1a2e', background: '#080810' }}>
-                BOOKMAKER BINARI ({oddsData.length})
-              </div>
-              <div style={{ maxHeight: 280, overflowY: 'auto', background: '#080810' }}>
+              <div style={{ padding: '8px 16px', fontSize: 10, color: '#6688ff', letterSpacing: 1, borderBottom: '1px solid #1a1a2e', background: '#080810' }}>BOOKMAKER ({oddsData.length})</div>
+              <div style={{ maxHeight: 260, overflowY: 'auto', background: '#080810' }}>
                 {oddsData.map(e => (
-                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 14px', borderBottom: '1px solid #0d0d1e', gap: 8 }}>
-                    <span style={{ color: '#8080b0', fontSize: 11, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {e.homeTeam} vs {e.awayTeam}
-                    </span>
-                    <span style={{ color: '#3a3a6a', fontSize: 10, flexShrink: 0 }}>{getSportLabel(e.sport)}</span>
+                  <div key={e.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '5px 14px', borderBottom: '1px solid #0d0d1e' }}>
+                    <span style={{ color: '#8080b0', fontSize: 11, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.homeTeam} vs {e.awayTeam}</span>
+                    <span style={{ color: '#3a3a6a', fontSize: 10, flexShrink: 0, marginLeft: 8 }}>{getSportLabel(e.sport)}</span>
                   </div>
                 ))}
               </div>
@@ -412,59 +404,103 @@ export default function App() {
   );
 }
 
-// ─── EVENT CARD ──────────────────────────────────────────────────────────────
-
-function EventCard({ event, threshold }) {
-  const hasEdge = event.maxEdge >= threshold;
+// ─── ARB CARD ─────────────────────────────────────────────────────────────────
+function ArbCard({ result, budget }) {
+  const { arb, homeTeam, awayTeam, sport, commenceTime, volume } = result;
+  const isReal = arb.isArbitrage;
+  const profitEuro = (budget * parseFloat(arb.profit) / 100).toFixed(2);
 
   return (
-    <div className="card" style={{
-      background: '#0a0a18',
-      border: `1px solid ${hasEdge ? 'rgba(0,255,136,.35)' : '#1a1a2e'}`,
-      borderRadius: 8,
-      padding: '14px 16px',
-      position: 'relative',
-      transition: 'border-color .2s',
-    }}>
-      {hasEdge && (
-        <div style={{ position: 'absolute', top: -1, right: 14, background: '#00ff88', color: '#000', fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: '0 0 6px 6px', letterSpacing: 1 }}>
-          EDGE +{event.maxEdge}%
-        </div>
-      )}
+    <div className={isReal ? 'card-arb' : ''}
+      style={{
+        background: '#0a0a18',
+        border: `1px solid ${isReal ? 'rgba(0,255,136,.5)' : 'rgba(255,170,68,.25)'}`,
+        borderRadius: 8,
+        padding: '16px 18px',
+        position: 'relative',
+      }}>
 
-      {/* Titolo */}
-      <div style={{ marginBottom: 10 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: '#e0e0f0', fontFamily: "'Syne', sans-serif", marginBottom: 4, paddingRight: hasEdge ? 60 : 0 }}>
-          {event.homeTeam} vs {event.awayTeam}
+      {/* Badge */}
+      <div style={{ position: 'absolute', top: -1, right: 14, background: isReal ? '#00ff88' : '#ffaa44', color: '#000', fontSize: 9, fontWeight: 800, padding: '2px 10px', borderRadius: '0 0 6px 6px', letterSpacing: 1.5 }}>
+        {isReal ? `ARB +${arb.profit}%` : `MARGINE ${(arb.margin * 100).toFixed(1)}%`}
+      </div>
+
+      {/* Titolo evento */}
+      <div style={{ marginBottom: 14, paddingRight: 80 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: '#f0f0ff', fontFamily: "'Syne', sans-serif", marginBottom: 5 }}>
+          {homeTeam} vs {awayTeam}
         </div>
-        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-          <span style={{ fontSize: 10, color: '#3a3a6a' }}>{getSportLabel(event.sport)}</span>
-          {event.commenceTime && <span style={{ fontSize: 10, color: '#3a3a6a' }}>🕐 {formatDate(event.commenceTime)}</span>}
-          {event.volume > 0 && <span style={{ fontSize: 10, color: '#3a3a6a' }}>💧 {formatVolume(event.volume)}</span>}
+        <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+          <span style={{ fontSize: 10, color: '#3a3a6a' }}>{getSportLabel(sport)}</span>
+          {commenceTime && <span style={{ fontSize: 10, color: '#3a3a6a' }}>🕐 {formatDate(commenceTime)}</span>}
+          {volume > 0 && <span style={{ fontSize: 10, color: '#3a3a6a' }}>💧 {formatVol(volume)}</span>}
         </div>
       </div>
 
-      {/* Tabella comparazione */}
-      <div style={{ display: 'flex', fontSize: 9, color: '#2a2a5a', letterSpacing: 1, textTransform: 'uppercase', borderBottom: '1px solid #1a1a2e', paddingBottom: 5, marginBottom: 5 }}>
-        <span style={{ flex: 2 }}>Esito</span>
-        <span style={{ flex: 1, textAlign: 'right' }}>Prob. reale</span>
-        <span style={{ flex: 1, textAlign: 'right' }}>Polymarket</span>
-        <span style={{ flex: 1, textAlign: 'right' }}>Edge</span>
-      </div>
+      {/* Separatore */}
+      <div style={{ borderTop: '1px solid #1a1a2e', marginBottom: 14 }} />
 
-      {event.comparisons.map((c, i) => {
-        const edgeColor = c.edge >= threshold ? '#00ff88' : c.edge >= 0 ? '#668866' : '#884444';
-        return (
-          <div key={i} style={{ display: 'flex', padding: '4px 0', background: c.edge >= threshold ? 'rgba(0,255,136,.04)' : 'transparent', borderRadius: 3 }}>
-            <span style={{ flex: 2, fontSize: 12, color: '#8080b0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.label}</span>
-            <span style={{ flex: 1, textAlign: 'right', fontSize: 12 }}>{c.realProb}%</span>
-            <span style={{ flex: 1, textAlign: 'right', fontSize: 12 }}>{c.polyPrice}%</span>
-            <span style={{ flex: 1, textAlign: 'right', fontSize: 12, color: edgeColor, fontWeight: 600 }}>
-              {c.edge > 0 ? '+' : ''}{c.edge}%
-            </span>
+      {/* Istruzioni scommessa */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 14 }}>
+
+        {/* Lato Bookmaker */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(102,136,255,.06)', border: '1px solid rgba(102,136,255,.15)', borderRadius: 6, padding: '10px 14px' }}>
+          <div style={{ fontSize: 11, color: '#6688ff', fontWeight: 700, minWidth: 32 }}>BK</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: '#c0c0e0', fontWeight: 600 }}>Vince {arb.bkSide.team}</div>
+            <div style={{ fontSize: 11, color: '#4a4a8a', marginTop: 2 }}>Quota {arb.bkSide.quota.toFixed(3)}</div>
           </div>
-        );
-      })}
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#6688ff' }}>€{arb.stakeBK}</div>
+            <div style={{ fontSize: 10, color: '#3a3a6a' }}>da investire</div>
+          </div>
+        </div>
+
+        {/* Lato Polymarket */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'rgba(0,255,136,.04)', border: '1px solid rgba(0,255,136,.15)', borderRadius: 6, padding: '10px 14px' }}>
+          <div style={{ fontSize: 11, color: '#00ff88', fontWeight: 700, minWidth: 32 }}>PM</div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, color: '#c0c0e0', fontWeight: 600 }}>Vince {arb.pmSide.team}</div>
+            <div style={{ fontSize: 11, color: '#2a6a4a', marginTop: 2 }}>Prezzo {(arb.pmSide.price * 100).toFixed(1)}¢ → quota {arb.pmSide.quota.toFixed(3)}</div>
+          </div>
+          <div style={{ textAlign: 'right' }}>
+            <div style={{ fontSize: 16, fontWeight: 700, color: '#00ff88' }}>€{arb.stakePM}</div>
+            <div style={{ fontSize: 10, color: '#3a3a6a' }}>da investire</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Risultato */}
+      <div style={{ background: isReal ? 'rgba(0,255,136,.08)' : 'rgba(255,170,68,.06)', border: `1px solid ${isReal ? 'rgba(0,255,136,.2)' : 'rgba(255,170,68,.15)'}`, borderRadius: 6, padding: '10px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div>
+          <div style={{ fontSize: 10, color: '#3a3a6a', letterSpacing: 1, marginBottom: 2 }}>
+            {isReal ? 'PROFITTO GARANTITO' : 'MARGINE TOTALE'}
+          </div>
+          <div style={{ fontSize: 11, color: '#5a5a8a' }}>
+            Totale investito: <strong style={{ color: '#8080b0' }}>€{budget}</strong>
+          </div>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div style={{ fontSize: 22, fontWeight: 800, color: isReal ? '#00ff88' : '#ffaa44', fontFamily: "'Syne', sans-serif" }}>
+            {isReal ? `+€${profitEuro}` : `${(arb.margin * 100).toFixed(2)}%`}
+          </div>
+          <div style={{ fontSize: 10, color: '#3a3a6a' }}>
+            {isReal ? `+${arb.profit}% su €${budget}` : 'manca ancora il gap'}
+          </div>
+        </div>
+      </div>
+
     </div>
   );
+}
+
+function formatDate(d) {
+  if (!d) return '';
+  return new Date(d).toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+function formatVol(v) {
+  if (!v) return '';
+  if (v >= 1e6) return `$${(v/1e6).toFixed(1)}M`;
+  if (v >= 1e3) return `$${(v/1e3).toFixed(0)}K`;
+  return `$${v}`;
 }
