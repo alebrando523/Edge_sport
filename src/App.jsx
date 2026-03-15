@@ -112,6 +112,7 @@ export default function App() {
   const [error, setError] = useState(null);
   const [lastUpdate, setLastUpdate] = useState(null);
   const [edgeThreshold, setEdgeThreshold] = useState(3);
+  const [polySeasonData, setPolySeasonData] = useState([]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -131,7 +132,14 @@ export default function App() {
       if (poly.error) throw new Error(`Polymarket: ${poly.error}`);
 
       setOddsData(Array.isArray(odds) ? odds : []);
-      setPolyData(Array.isArray(poly) ? poly : []);
+      // Nuova struttura: { matchMarkets, seasonMarkets, total }
+      if (poly.matchMarkets !== undefined) {
+        setPolyData(poly.matchMarkets || []);
+        setPolySeasonData(poly.seasonMarkets || []);
+      } else {
+        setPolyData(Array.isArray(poly) ? poly : []);
+        setPolySeasonData([]);
+      }
       setLastUpdate(new Date());
     } catch (e) {
       setError(e.message);
@@ -255,7 +263,11 @@ export default function App() {
             </div>
             <div style={styles.statBox}>
               <span style={styles.statNum}>{polyData.length}</span>
-              <span style={styles.statLabel}>eventi Polymarket</span>
+              <span style={styles.statLabel}>partite Polymarket</span>
+            </div>
+            <div style={styles.statBox}>
+              <span style={{ ...styles.statNum, color: '#666688' }}>{polySeasonData.length}</span>
+              <span style={styles.statLabel}>mercati stagionali</span>
             </div>
             <div style={styles.statBox}>
               <span style={styles.statNum}>{oddsData.length}</span>
@@ -301,12 +313,22 @@ export default function App() {
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
               <div>
                 <div style={{ padding: '8px 16px', fontSize: 10, color: '#00ff88', letterSpacing: 1, borderBottom: '1px solid #1a1a2e' }}>
-                  POLYMARKET ({polyData.length} eventi)
+                  POLYMARKET PARTITE ({polyData.length}) + STAGIONALI ({polySeasonData.length})
                 </div>
                 <div style={{ ...styles.rawList, maxHeight: 200 }}>
-                  {polyData.slice(0, 30).map(e => (
+                  {polyData.length === 0 && (
+                    <div style={{ padding: '8px 16px', color: '#ff5555', fontSize: 11 }}>
+                      ⚠ Nessuna partita singola trovata su Polymarket per questo sport
+                    </div>
+                  )}
+                  {polyData.map(e => (
                     <div key={e.id} style={styles.rawItem}>
-                      <span style={{ color: '#a0a0c0', fontSize: 11 }}>{e.title}</span>
+                      <span style={{ color: '#00ff88', fontSize: 11 }}>⚡ {e.title}</span>
+                    </div>
+                  ))}
+                  {polySeasonData.slice(0, 15).map(e => (
+                    <div key={e.id} style={styles.rawItem}>
+                      <span style={{ color: '#666688', fontSize: 11 }}>📅 {e.title}</span>
                     </div>
                   ))}
                 </div>
