@@ -73,7 +73,15 @@ function tokens(s) { return normalize(s).split(' ').filter(t => t.length >= 3); 
 function overlap(a, b) {
   const ta = tokens(a), tb = tokens(b);
   if (!ta.length) return 0;
-  return ta.filter(t => tb.some(bt => bt.includes(t) || t.includes(bt))).length / ta.length;
+  return ta.filter(t =>
+    tb.some(bt => {
+      if (bt === t) return true; // match esatto
+      // substring match solo se la stringa più corta è almeno il 70% di quella più lunga
+      // evita falsi positivi come "under" dentro "thunder"
+      const [shorter, longer] = t.length <= bt.length ? [t, bt] : [bt, t];
+      return longer.includes(shorter) && shorter.length / longer.length >= 0.85;
+    })
+  ).length / ta.length;
 }
 
 // Controlla compatibilità data entro tolleranza in ore
