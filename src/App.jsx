@@ -10,44 +10,75 @@ function devigOdds(oddsMap) {
   return Object.fromEntries(probs.map(([k, p]) => [k, p / total]));
 }
 
-// Normalizza nome squadra per il matching (rimuove suffissi comuni)
+// Suffissi e parole da rimuovere per la normalizzazione
+const STRIP_WORDS = /\b(fc|calcio|afc|cf|sc|ac|ss|us|as|fk|bk|sk|cd|rcd|rc|sd|ud|ca|sv|vfb|vfl|rb|rbl|tsv|tsg|1899|1913|1905|1904|de|del|la|le|los|las|el|il|lo|lo|gli|le|will|win|beat|vs|v|the|to|who|which|advance|qualify|make|reach|league|cup|serie|premier|champions|bundesliga|ligue|eredivisie|primeira|superliga|united|city|real|club|sporting|atletico|athletico|athletic|borussia|internazionale|inter|dynamo|dinamo|lokomotiv|spartak|shakhtar|galatasaray|fenerbahce|besiktas|trabzonspor)\b/gi;
+
+// Normalizza testo per il matching
 function normalizeName(name = '') {
   return name
     .toLowerCase()
-    .replace(/\b(fc|calcio|afc|cf|sc|ac|ss|us|as|1913|united|city|real|club|sporting|atletico|inter|atletik)\b/gi, '')
-    .replace(/[^a-z]/g, '')
+    .replace(STRIP_WORDS, ' ')
+    .replace(/[^a-z\s]/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
+// Estrae token significativi (min 3 caratteri) da una stringa normalizzata
+function tokens(str) {
+  return normalizeName(str).split(' ').filter(t => t.length >= 3);
+}
+
+// Calcola quanti token di A sono contenuti in B
+function tokenOverlap(a, b) {
+  const ta = tokens(a);
+  const tb = tokens(b);
+  if (ta.length === 0) return 0;
+  const matches = ta.filter(t => tb.some(bt => bt.includes(t) || t.includes(bt)));
+  return matches.length / ta.length;
+}
+
 // Prova a fare match tra un evento Odds API e un evento Polymarket
+// Usa token overlap su titolo + outcomes Polymarket
 function tryMatch(oddsEvent, polyEvent) {
-  const homeN = normalizeName(oddsEvent.homeTeam);
-  const awayN = normalizeName(oddsEvent.awayTeam);
-  const titleN = normalizeName(polyEvent.title);
+  const title = polyEvent.title || '';
+  const polyText = [title, ...Object.keys(polyEvent.outcomes || {})].join(' ');
 
-  const homeMatch = homeN.length > 3 && titleN.includes(homeN);
-  const awayMatch = awayN.length > 3 && titleN.includes(awayN);
+  const homeScore = tokenOverlap(oddsEvent.homeTeam, polyText);
+  const awayScore = tokenOverlap(oddsEvent.awayTeam, polyText);
 
-  return homeMatch || awayMatch;
+  // Basta che una delle due squadre abbia overlap ≥ 50%
+  return homeScore >= 0.5 || awayScore >= 0.5;
 }
 
 // Trova la chiave Polymarket che corrisponde a una chiave Odds API
 function findPolyOutcome(polyOutcomes, oddsKey) {
-  const norm = normalizeName(oddsKey);
-  for (const [k, v] of Object.entries(polyOutcomes)) {
-    if (normalizeName(k).includes(norm) || norm.includes(normalizeName(k))) {
-      return { key: k, price: v };
-    }
-  }
-  // Cerca pareggio
+  // Caso pareggio
   if (oddsKey.toLowerCase() === 'draw') {
     for (const [k, v] of Object.entries(polyOutcomes)) {
-      if (k.toLowerCase().includes('draw') || k.toLowerCase().includes('pareggio')) {
+      const kl = k.toLowerCase();
+      if (kl.includes('draw') || kl.includes('tie') || kl.includes('pareggio') || kl === 'x') {
         return { key: k, price: v };
       }
     }
+    return null;
   }
-  return null;
+
+  let bestKey = null;
+  let bestScore = 0;
+
+  for (const [k, v] of Object.entries(polyOutcomes)) {
+    // Salta outcome pareggio
+    const kl = k.toLowerCase();
+    if (kl.includes('draw') || kl.includes('tie') || kl === 'x') continue;
+
+    const score = Math.max(tokenOverlap(oddsKey, k), tokenOverlap(k, oddsKey));
+    if (score > bestScore) {
+      bestScore = score;
+      bestKey = [k, v];
+    }
+  }
+
+  return bestScore >= 0.4 && bestKey ? { key: bestKey[0], price: bestKey[1] } : null;
 }
 
 // Calcola edge: differenza tra prezzo Polymarket e probabilità reale
@@ -257,8 +288,43 @@ export default function App() {
         {!loading && !error && matchedEvents.length === 0 && (polyData.length > 0 || oddsData.length > 0) && (
           <div style={styles.emptyBox}>
             Nessun evento abbinato trovato tra Bookmaker e Polymarket per questo sport.
-            <br /><small style={{ opacity: 0.5 }}>Prova a cambiare sport o aspetta che Polymarket aggiorni i mercati.</small>
+            <br /><small style={{ opacity: 0.5 }}>Controlla il pannello Debug qui sotto per vedere i titoli raw delle due API.</small>
           </div>
+        )}
+
+        {/* DEBUG PANEL */}
+        {!loading && (polyData.length > 0 || oddsData.length > 0) && (
+          <details style={{ ...styles.details, marginBottom: 16 }}>
+            <summary style={styles.detailsSummary}>
+              🔍 Debug — Titoli raw API (utile per capire perché il matching non funziona)
+            </summary>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 0 }}>
+              <div>
+                <div style={{ padding: '8px 16px', fontSize: 10, color: '#00ff88', letterSpacing: 1, borderBottom: '1px solid #1a1a2e' }}>
+                  POLYMARKET ({polyData.length} eventi)
+                </div>
+                <div style={{ ...styles.rawList, maxHeight: 200 }}>
+                  {polyData.slice(0, 30).map(e => (
+                    <div key={e.id} style={styles.rawItem}>
+                      <span style={{ color: '#a0a0c0', fontSize: 11 }}>{e.title}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div style={{ borderLeft: '1px solid #1a1a2e' }}>
+                <div style={{ padding: '8px 16px', fontSize: 10, color: '#4488ff', letterSpacing: 1, borderBottom: '1px solid #1a1a2e' }}>
+                  BOOKMAKER ({oddsData.length} eventi)
+                </div>
+                <div style={{ ...styles.rawList, maxHeight: 200 }}>
+                  {oddsData.slice(0, 30).map(e => (
+                    <div key={e.id} style={styles.rawItem}>
+                      <span style={{ color: '#a0a0c0', fontSize: 11 }}>{e.homeTeam} vs {e.awayTeam}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </details>
         )}
 
         {/* Event Cards */}
