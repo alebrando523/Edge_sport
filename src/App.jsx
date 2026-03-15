@@ -168,6 +168,11 @@ export default function App() {
 
     if (!comparisons.length) continue;
 
+    // Validazione: la somma dei prezzi Polymarket deve essere vicina a 100%
+    // Se non lo è, il matching è sbagliato (due outcome mappati allo stesso prezzo)
+    const polySum = comparisons.reduce((s, c) => s + parseFloat(c.polyPrice), 0);
+    if (polySum < 85 || polySum > 115) continue; // tolleranza ±15%
+
     const maxEdge = Math.max(...comparisons.map(c => c.edge));
     matched.push({
       id: poly.id,
