@@ -163,6 +163,12 @@ export default function App() {
 
     if (!oddsMatch) continue;
 
+    // Salta eventi con pareggio (campionati) — teniamo solo eliminazione diretta
+    const hasDrawOption = Object.keys(oddsMatch.outcomes).some(k =>
+      k.toLowerCase() === 'draw' || k.toLowerCase() === 'x'
+    );
+    if (hasDrawOption) continue;
+
     const realProbs = devigOdds(oddsMatch.outcomes);
     const comparisons = [];
 
@@ -236,6 +242,18 @@ export default function App() {
               {s.emoji} {s.label}
             </button>
           ))}
+        </div>
+
+        {/* Filtro attivo */}
+        <div style={styles.filterNote}>
+          <span style={{ color: '#00ff88' }}>✓</span> Filtro attivo: solo eventi <strong>senza pareggio</strong> —
+          {sport === 'soccer'
+            ? ' Champions League, Europa League, Coppe nazionali'
+            : sport === 'basketball'
+            ? ' NBA (nessun pareggio possibile)'
+            : sport === 'tennis'
+            ? ' tutti i tornei (nessun pareggio possibile)'
+            : ' NFL (nessun pareggio possibile)'}
         </div>
 
         {/* Controlli */}
@@ -623,6 +641,16 @@ const styles = {
   col1: { flex: 2, color: '#8080b0' },
   col2: { flex: 1, textAlign: 'right', color: '#3a3a6a', fontSize: 10 },
   col2mono: { flex: 1, textAlign: 'right', fontFamily: "'JetBrains Mono', monospace" },
+  filterNote: {
+    fontSize: 12,
+    color: '#4a4a6a',
+    background: '#0a0a18',
+    border: '1px solid #1a1a2e',
+    borderRadius: 6,
+    padding: '10px 16px',
+    marginBottom: 16,
+    letterSpacing: 0.3,
+  },
   details: {
     border: '1px solid #1a1a2e',
     borderRadius: 6,
