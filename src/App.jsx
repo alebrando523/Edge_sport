@@ -95,8 +95,16 @@ export default function App() {
     setLoading(true); setError(null);
     try {
       const r = await fetch('/api/odds');
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const data = await r.json();
+      const text = await r.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        // La funzione ha restituito HTML invece di JSON
+        const preview = text.substring(0, 200).replace(/<[^>]+>/g, ' ').trim();
+        throw new Error(`Risposta non-JSON da /api/odds: "${preview}"`);
+      }
+      if (!r.ok) throw new Error(data?.error || `HTTP ${r.status}`);
       if (data.error) throw new Error(data.error);
       setEvents(data.events || []);
       if (data.apiUsage)       setApiUsage(data.apiUsage);
