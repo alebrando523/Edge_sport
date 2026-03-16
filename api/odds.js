@@ -129,26 +129,49 @@ export default async function handler(req, res) {
           const backOdds = backData.quota;
           const layOdds_ = layData.quota;
 
-          // Quota lay effettiva considerando la commissione
-          // Profitto netto lay = (layOdds - 1) × stake × (1 - commission)
-          // Per il calcolo arb usiamo lay odds aggiustate
-          const layOddsAdj = 1 + (layOdds_ - 1) * (1 - BETFAIR_COMMISSION);
+          // ── CALCOLO CORRETTO BACK/LAY ──────────────────────────────────
+          // Condizione necessaria per arb: backOdds > layOdds (SEMPRE, prima di comm.)
+          // La commissione si applica solo ai guadagni del lay (quando back perde).
+          //
+          // Se back VINCE:  profit = stakeBack×(backOdds-1) - stakeLay×(layOdds-1)
+          // Se back PERDE:  profit = stakeLay×(1-comm) - stakeBack
+          //
+          // Stake ottimali per profitto uguale in entrambi i casi:
+          //   stakeBack × backOdds = stakeLay × layOdds  →  equalized liability
+          //   stakeBack = budget / backOdds
+          //   stakeLay  = budget / layOdds
+          //
+          // Profitto per unità di budget:
+          //   winProfit  = (backOdds-1)/backOdds - (layOdds-1)/layOdds
+          //   loseProfit = (1-comm)/layOdds - 1/backOdds
+          //
+          // È un arb reale solo se ENTRAMBI i profitti sono positivi.
 
-          // Arb back/lay esiste se: backOdds > layOdds (lay grezzo)
-          // Con commissione: backOdds > layOddsAdj
-          const isArb = backOdds > layOddsAdj;
-          const margin = (1 / backOdds) + (1 / layOddsAdj);
-          const profit = ((1 / margin) - 1) * 100;
+          const stakeBackUnit = 1 / backOdds;
+          const stakeLayUnit  = 1 / layOdds_;
+
+          const winProfit  = (backOdds - 1) * stakeBackUnit - (layOdds_ - 1) * stakeLayUnit;
+          const loseProfit = stakeLayUnit * (1 - BETFAIR_COMMISSION) - stakeBackUnit;
+
+          const minProfit = Math.min(winProfit, loseProfit);
+          const isArb = minProfit > 0;
+          // Percentuale rispetto al budget (backStake = 1/backOdds del budget)
+          const profitPct = minProfit * backOdds * 100;
+
+          // Gap: quanto manca per diventare arb (negativo = perdita)
+          const gap = profitPct;
 
           backLayOpps.push({
             outcome,
             backOdds,
             backBookmaker: backData.bookmaker,
             layOdds: layOdds_,
-            layOddsAdj: parseFloat(layOddsAdj.toFixed(4)),
+            layOddsAdj: parseFloat(layOdds_.toFixed(4)), // mantenuto per compatibilità UI
             isArb,
-            margin: parseFloat(margin.toFixed(4)),
-            profit: parseFloat(profit.toFixed(2)),
+            margin: parseFloat((1 - minProfit).toFixed(4)),
+            profit: parseFloat(gap.toFixed(2)),
+            winProfit:  parseFloat((winProfit  * 100).toFixed(2)),
+            loseProfit: parseFloat((loseProfit * 100).toFixed(2)),
             usedLayOdds: hasLay ? 'lay' : 'back_proxy',
           });
         }
