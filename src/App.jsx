@@ -47,22 +47,24 @@ const getSport = k => {
 const fmtDate = d => d ? new Date(d).toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}) : '';
 const fmtEur = n => `€${parseFloat(n).toFixed(2)}`;
 
-// ─── CALCOLO STAKE BACK/LAY ───────────────────────────────────────────────────
-// Dato budget totale B:
-//   stakeBack = B / (1 + backOdds/layOddsAdj - 1) → formula esatta:
-//   Per avere profitto uguale in entrambi i casi:
-//   stakeBack × backOdds = stakeLay × layOdds
-//   stakeBack + stakeLay = budget (approssimato)
-//   → stakeBack = budget × layOddsAdj / (backOdds + layOddsAdj - 1)  [approssimato]
-//   → stakeLay  = budget × backOdds    / (backOdds + layOddsAdj - 1)
-function calcStakes(backOdds, layOddsAdj, budget) {
-  const denom = backOdds + layOddsAdj - 1;
-  const stakeBack = (budget * layOddsAdj) / denom;
-  const stakeLay  = (budget * backOdds)    / denom;
-  // Profitto se back vince = stakeBack*(backOdds-1) - stakeLay*(layOddsAdj-1)
-  const profitIfWin  = stakeBack*(backOdds-1) - stakeLay*(layOddsAdj-1);
-  // Profitto se back perde = stakeLay - stakeBack
-  const profitIfLose = stakeLay - stakeBack;
+// ─── CALCOLO STAKE BACK/LAY (FORMULA CORRETTA) ──────────────────────────────
+// Stake ottimali: proporzionali alle probabilità implicite
+//   stakeBack = budget / backOdds
+//   stakeLay  = budget / layOdds
+//
+// Profitto se back VINCE:  stakeBack×(backOdds-1) - stakeLay×(layOdds-1)
+// Profitto se back PERDE:  stakeLay×(1-comm) - stakeBack
+//
+// NB: arb reale solo se backOdds > layOdds (condizione necessaria)
+const BETFAIR_COMM = 0.05;
+
+function calcStakes(backOdds, layOdds, budget) {
+  const stakeBack = budget / backOdds;
+  const stakeLay  = budget / layOdds;
+
+  const profitIfWin  = stakeBack*(backOdds-1) - stakeLay*(layOdds-1);
+  const profitIfLose = stakeLay*(1-BETFAIR_COMM) - stakeBack;
+
   return {
     stakeBack: stakeBack.toFixed(2),
     stakeLay:  stakeLay.toFixed(2),
